@@ -16,9 +16,10 @@ windows = { version = "0.43.0", features = [
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Direct3D_Fxc",
     "Win32_Foundation",
 ] }
-imgui = "0.9.0"
+imgui = "0.11.0"
 
 [build-dependencies]
 windows = { version = "0.43.0", features = [
@@ -27,9 +28,9 @@ windows = { version = "0.43.0", features = [
 ] }
 
 [dev-dependencies]
-imgui = { version = "0.9.0" }
-imgui-winit-support = { version = "0.9.0" }
-winit = "0.27.5"
+imgui = { version = "0.11.0" }
+imgui-winit-support = { version = "0.11.0" }
+winit = "0.27.2"
 windows = { version = "0.43.0", features = [
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Direct3D",

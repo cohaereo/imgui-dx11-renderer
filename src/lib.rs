@@ -1,13 +1,12 @@
 #![cfg(windows)]
 #![deny(missing_docs)]
-#![no_std]
 //! This crate offers a DirectX 11 renderer for the [imgui-rs](https://docs.rs/imgui/*/imgui/) rust bindings.
-
 
 use core::{mem, slice};
 
 use windows::core::{Result, PCSTR};
 use windows::Win32::Foundation::RECT;
+use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Direct3D::{
     D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, D3D11_SRV_DIMENSION_TEXTURE2D, D3D_PRIMITIVE_TOPOLOGY,
 };
@@ -37,6 +36,7 @@ use imgui::internal::RawWrapper;
 use imgui::{
     BackendFlags, DrawCmd, DrawCmdParams, DrawData, DrawIdx, DrawVert, TextureId, Textures,
 };
+use windows::s;
 
 const FONT_TEX_ID: usize = !0;
 
@@ -236,7 +236,7 @@ impl Renderer {
         ctx.IASetIndexBuffer(self.index_buffer.get_buf(), draw_fmt, 0);
         ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ctx.VSSetShader(&self.vertex_shader, None);
-        ctx.VSSetConstantBuffers(0, Some(&[Some(self.constant_buffer.clone())]));
+        ctx.VSSetConstantBuffers(12, Some(&[Some(self.constant_buffer.clone())]));
         ctx.PSSetShader(&self.pixel_shader, None);
         ctx.PSSetSamplers(0, Some(&[Some(self.font_sampler.clone())]));
         ctx.GSSetShader(None, None);
@@ -374,9 +374,30 @@ impl Renderer {
     unsafe fn create_vertex_shader(
         device: &ID3D11Device,
     ) -> Result<(ID3D11VertexShader, ID3D11InputLayout, ID3D11Buffer)> {
-        const VERTEX_SHADER: &[u8] =
-            include_bytes!(concat!(env!("OUT_DIR"), "/vertex_shader.vs_4_0"));
-        let vs_shader = device.CreateVertexShader(VERTEX_SHADER, None)?;
+        static VERTEX_SHADER: &str = include_str!("vertex_shader.vs_4_0");
+
+        let mut vs_blob = None;
+
+        D3DCompile(
+            VERTEX_SHADER.as_ptr() as _,
+            VERTEX_SHADER.len(),
+            None,
+            None,
+            None,
+            s!("main"),
+            s!("vs_4_0"),
+            0,
+            0,
+            &mut vs_blob,
+            None,
+        )?;
+
+        let vs_blob = vs_blob.unwrap();
+        let vs_blob = ::std::slice::from_raw_parts(
+            vs_blob.GetBufferPointer() as *const u8,
+            vs_blob.GetBufferSize(),
+        );
+        let vs_shader = device.CreateVertexShader(vs_blob, None)?;
 
         let local_layout = [
             D3D11_INPUT_ELEMENT_DESC {
@@ -408,7 +429,7 @@ impl Renderer {
             },
         ];
 
-        let input_layout = device.CreateInputLayout(&local_layout, VERTEX_SHADER)?;
+        let input_layout = device.CreateInputLayout(&local_layout, vs_blob)?;
 
         let desc = D3D11_BUFFER_DESC {
             ByteWidth: mem::size_of::<VertexConstantBuffer>() as _,
@@ -423,9 +444,33 @@ impl Renderer {
     }
 
     unsafe fn create_pixel_shader(device: &ID3D11Device) -> Result<ID3D11PixelShader> {
-        const PIXEL_SHADER: &[u8] =
-            include_bytes!(concat!(env!("OUT_DIR"), "/pixel_shader.ps_4_0"));
-        device.CreatePixelShader(PIXEL_SHADER, None)
+        // const PIXEL_SHADER: &[u8] =
+        //     include_bytes!(concat!(env!("OUT_DIR"), "/pixel_shader.ps_4_0"));
+        // device.CreatePixelShader(PIXEL_SHADER, None)
+        static PIXEL_SHADER: &str = include_str!("pixel_shader.ps_4_0");
+
+        let mut ps_blob = None;
+
+        D3DCompile(
+            PIXEL_SHADER.as_ptr() as _,
+            PIXEL_SHADER.len(),
+            None,
+            None,
+            None,
+            s!("main"),
+            s!("ps_4_0"),
+            0,
+            0,
+            &mut ps_blob,
+            None,
+        )?;
+
+        let ps_blob = ps_blob.unwrap();
+        let ps_blob = ::std::slice::from_raw_parts(
+            ps_blob.GetBufferPointer() as *const u8,
+            ps_blob.GetBufferSize(),
+        );
+        device.CreatePixelShader(ps_blob, None)
     }
 
     unsafe fn create_device_objects(
@@ -508,7 +553,7 @@ struct StateBackup<'a> {
     ps_instances: Option<ID3D11ClassInstance>,
     vs_shader: Option<ID3D11VertexShader>,
     vs_instances: Option<ID3D11ClassInstance>,
-    constant_buffer: &'a mut[Option<ID3D11Buffer>],
+    constant_buffer: &'a mut [Option<ID3D11Buffer>],
     gs_shader: Option<ID3D11GeometryShader>,
     gs_instances: Option<ID3D11ClassInstance>,
     index_buffer: Option<ID3D11Buffer>,
@@ -526,8 +571,8 @@ impl<'a> StateBackup<'a> {
         let mut result = Self::default();
 
         let ctx = context.as_ref().unwrap();
-        ctx.RSGetScissorRects(&mut 16, Some(&mut result.scissor_rects));
-        ctx.RSGetViewports(&mut 16, Some(&mut result.viewports));
+        ctx.RSGetScissorRects(&mut 1, Some(&mut result.scissor_rects));
+        ctx.RSGetViewports(&mut 1, Some(&mut result.viewports));
         ctx.RSGetState(Some(&mut result.rasterizer_state));
         ctx.OMGetBlendState(
             Some(&mut result.blend_state),
@@ -576,7 +621,7 @@ impl<'a> StateBackup<'a> {
     pub fn restore(self) {
         unsafe {
             let ctx = self.context.as_ref().unwrap();
-            
+
             ctx.RSSetScissorRects(Some(&[self.scissor_rects]));
             ctx.RSSetViewports(Some(&[self.viewports]));
             if let Some(rasterizer_state) = self.rasterizer_state {
