@@ -236,7 +236,7 @@ impl Renderer {
         ctx.IASetIndexBuffer(self.index_buffer.get_buf(), draw_fmt, 0);
         ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ctx.VSSetShader(&self.vertex_shader, None);
-        ctx.VSSetConstantBuffers(12, Some(&[Some(self.constant_buffer.clone())]));
+        ctx.VSSetConstantBuffers(0, Some(&[Some(self.constant_buffer.clone())]));
         ctx.PSSetShader(&self.pixel_shader, None);
         ctx.PSSetSamplers(0, Some(&[Some(self.font_sampler.clone())]));
         ctx.GSSetShader(None, None);
